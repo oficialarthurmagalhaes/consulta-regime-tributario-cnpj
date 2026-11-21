@@ -1,51 +1,46 @@
+"""Interface web (Streamlit) da consulta de regime tributário por CNPJ."""
+
 import streamlit as st
-import requests
 
-def consultar_cnpj(cnpj):
+from cnpj import (
+    CNPJInvalidoError,
+    CNPJNaoEncontradoError,
+    ErroConsultaAPI,
+    consultar_cnpj,
+)
 
-    URL_API = f"https://api.opencnpj.org/{cnpj}"
+st.set_page_config(page_title="Consulta de Regime Tributário", page_icon="🧾")
 
-    response = requests.get(URL_API)
+st.header("🧾 Consulta de Regime Tributário por CNPJ")
+st.caption("Descubra se uma empresa é MEI, optante do Simples Nacional ou do regime normal.")
 
-    status_requisicao = response.status_code
-
-    if status_requisicao == 200:
-        st.success("Conexão bem sucedida✅")
-
-        dados = response.json()
-
-        razao_social = dados['razao_social']
-        nome_fantasia = dados['nome_fantasia']
-        situacao_cadastral = dados['situacao_cadastral']
-        porte_empresa = dados['porte_empresa']
-        simples_nacional = dados['opcao_simples']
-        mei = dados['opcao_mei']
-        regime_tributario = ''
-
-        #REGIME TRIBUTARIO
-        if((simples_nacional == "S") and (mei == "S")):
-            regime_tributario = "MEI"
-        elif((simples_nacional == "S") and (mei == "N")):
-            regime_tributario = "SIMPLES NACIONAL"
-        else:
-            regime_tributario = "REGIME NORMAL"
-
-        st.markdown(f"""
-        - **CNPJ:** {cnpj}  
-        - **Razão Social:** {razao_social}  
-        - **Nome Fantasia:** {nome_fantasia}
-        - **Situação Cadastral:** {situacao_cadastral}
-        - **Porte Empresa:** {porte_empresa}
-        - **Regime Tributário:** {regime_tributario}
-        """)
-    else:
-        st.error(f"Erro {status_requisicao} | Conexão Mal Sucedida❌ | CNPJ não encontrado.")
-
-titulo = st.header("Consulta de Regime Tributário por CNPJ")
-
-cnpj = st.text_input("Insira o CNPJ:")
-
-pesquisar = st.button("Pesquisar")
+with st.form("consulta"):
+    cnpj = st.text_input("CNPJ", placeholder="00.000.000/0000-00 (com ou sem pontuação)")
+    pesquisar = st.form_submit_button("Pesquisar")
 
 if pesquisar:
-    consultar_cnpj(cnpj)
+    try:
+        with st.spinner("Consultando..."):
+            empresa = consultar_cnpj(cnpj)
+    except CNPJInvalidoError as erro:
+        st.warning(str(erro))
+    except CNPJNaoEncontradoError as erro:
+        st.error(str(erro))
+    except ErroConsultaAPI as erro:
+        st.error(str(erro))
+    else:
+        st.success(f"Regime tributário: **{empresa['regime_tributario']}**")
+        st.markdown(
+            f"""
+- **CNPJ:** {empresa['cnpj']}
+- **Razão Social:** {empresa['razao_social']}
+- **Nome Fantasia:** {empresa['nome_fantasia']}
+- **Situação Cadastral:** {empresa['situacao_cadastral']}
+- **Porte da Empresa:** {empresa['porte_empresa']}
+"""
+        )
+        if empresa["regime_tributario"] == "REGIME NORMAL":
+            st.info("Regime normal = Lucro Presumido ou Lucro Real. A API pública não informa qual dos dois.")
+
+st.divider()
+st.caption("Dados da [OpenCNPJ](https://opencnpj.org), com base nos dados abertos da Receita Federal.")
